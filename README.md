@@ -8,7 +8,7 @@ bandwidth, supports public or private placement, and optional network security g
 
 ```hcl
 module "load_balancer" {
-  source = "github.com/cybercapybara/terraform-oci-load-balancer"
+  source = "github.com/moveeeax/terraform-oci-load-balancer"
 
   compartment_id = var.compartment_id
   display_name   = "prod-lb"
