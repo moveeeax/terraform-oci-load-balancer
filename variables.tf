@@ -9,12 +9,26 @@ variable "display_name" {
 }
 
 variable "subnet_ids" {
-  description = "List of subnet OCIDs the load balancer is attached to."
+  description = <<-EOT
+    List of subnet OCIDs the load balancer is attached to. A private load balancer
+    takes exactly one subnet. A public load balancer takes one regional subnet, or
+    two availability-domain-specific subnets in different availability domains.
+  EOT
   type        = list(string)
 
   validation {
     condition     = length(var.subnet_ids) > 0
     error_message = "At least one subnet OCID must be provided."
+  }
+
+  validation {
+    condition     = length(var.subnet_ids) <= 2
+    error_message = "A load balancer can be attached to at most two subnets."
+  }
+
+  validation {
+    condition     = length(distinct(var.subnet_ids)) == length(var.subnet_ids)
+    error_message = "subnet_ids must not contain duplicate OCIDs."
   }
 }
 
@@ -22,10 +36,22 @@ variable "shape" {
   description = "Shape of the load balancer. Use flexible for auto-scaling bandwidth."
   type        = string
   default     = "flexible"
+
+  # The shape_details block in main.tf is emitted only when this is exactly
+  # "flexible". Without this check a typo such as "Flexible" is accepted at plan
+  # time, silently drops shape_details, and then fails at apply with an opaque
+  # API error.
+  validation {
+    condition = contains(
+      ["flexible", "10Mbps", "10Mbps-Micro", "100Mbps", "400Mbps", "8000Mbps"],
+      var.shape
+    )
+    error_message = "shape must be one of: flexible, 10Mbps, 10Mbps-Micro, 100Mbps, 400Mbps, 8000Mbps (values are case-sensitive)."
+  }
 }
 
 variable "shape_details" {
-  description = "Minimum and maximum bandwidth in Mbps for the flexible shape."
+  description = "Minimum and maximum bandwidth in Mbps for the flexible shape. Ignored unless shape is \"flexible\"."
   type = object({
     minimum_bandwidth_in_mbps = number
     maximum_bandwidth_in_mbps = number
@@ -33,6 +59,19 @@ variable "shape_details" {
   default = {
     minimum_bandwidth_in_mbps = 10
     maximum_bandwidth_in_mbps = 100
+  }
+
+  validation {
+    condition = (
+      var.shape_details.minimum_bandwidth_in_mbps >= 10 &&
+      var.shape_details.maximum_bandwidth_in_mbps <= 8000
+    )
+    error_message = "Flexible shape bandwidth must be between 10 and 8000 Mbps."
+  }
+
+  validation {
+    condition     = var.shape_details.minimum_bandwidth_in_mbps <= var.shape_details.maximum_bandwidth_in_mbps
+    error_message = "minimum_bandwidth_in_mbps must be less than or equal to maximum_bandwidth_in_mbps."
   }
 }
 
